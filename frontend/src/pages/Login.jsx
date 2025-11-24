@@ -30,7 +30,7 @@ export default function Login() {
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8">
         <div className="flex items-center justify-center mb-8">
           <HardDrive className="w-12 h-12 text-indigo-600 mr-3" />
-          <h1 className="text-3xl font-bold text-gray-800">Local Storage</h1>
+          <h1 className="text-3xl font-bold text-gray-800">HOLT Storage</h1>
         </div>
 
         <h2 className="text-2xl font-semibold text-gray-700 mb-6 text-center">
@@ -55,7 +55,8 @@ export default function Login() {
               onChange={(e) =>
                 setFormData({ ...formData, username: e.target.value })
               }
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition"
+              // Added focus:border-indigo-500 for consistency
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
               required
             />
           </div>
@@ -70,7 +71,8 @@ export default function Login() {
               onChange={(e) =>
                 setFormData({ ...formData, password: e.target.value })
               }
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition"
+              // Added focus:border-indigo-500 for consistency
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
               required
             />
           </div>
@@ -78,9 +80,14 @@ export default function Login() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-indigo-600 text-white py-3 rounded-lg font-medium hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            // Enforced fixed height and minimum width for layout stability
+            className="w-full h-12 bg-indigo-600 text-white py-3 rounded-lg font-medium hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
           >
-            {loading ? "Signing in..." : "Sign In"}
+            {loading ? (
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+            ) : (
+              "Sign In"
+            )}
           </button>
         </form>
 

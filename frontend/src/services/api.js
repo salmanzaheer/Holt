@@ -4,6 +4,7 @@ const API_URL = "http://localhost:3001/api";
 
 const api = axios.create({
   baseURL: API_URL,
+  withCredentials: true, // ensuring cookies are sent
 });
 
 // Add token to requests
@@ -22,7 +23,7 @@ api.interceptors.response.use(
     if (error.response?.status === 401 || error.response?.status === 403) {
       localStorage.removeItem("token");
       localStorage.removeItem("user");
-      window.location.href = "/login";
+      // removed reload causing issues
     }
     return Promise.reject(error);
   }
@@ -51,6 +52,22 @@ export const downloadFile = (fileId) => {
   return api.get(`/files/download/${fileId}`, { responseType: "blob" });
 };
 export const deleteFile = (fileId) => api.delete(`/files/${fileId}`);
+export const renameFile = (fileId, newName) => {
+  return api.patch(`/files/${fileId}`, { newName });
+};
+
+// Media URLs
+export const getMediaToken = (fileId) => api.get(`/files/token/${fileId}`);
+
+export const getViewUrl = (fileId, token) =>
+  `${API_URL}/files/view/${fileId}?token=${token}`;
+
+export const getStreamUrl = (fileId, token) =>
+  `${API_URL}/files/stream/${fileId}?token=${token}`;
+
+export const getThumbnailUrl = (fileId, token) =>
+  `${API_URL}/files/thumbnail/${fileId}?token=${token}`;
+
 
 // Users
 export const getUserProfile = () => api.get("/users/profile");
