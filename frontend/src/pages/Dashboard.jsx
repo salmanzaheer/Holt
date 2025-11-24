@@ -14,7 +14,9 @@ import {
   Download,
   Grid,
   List,
-  Filter,
+  Clock,
+  FolderOpen,
+  TrendingUp,
 } from "lucide-react";
 import {
   getFiles,
@@ -32,10 +34,19 @@ export default function Dashboard() {
   const [filteredFiles, setFilteredFiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [activeTab, setActiveTab] = useState("all");
   const [viewMode, setViewMode] = useState("grid");
   const [showUpload, setShowUpload] = useState(false);
   const [stats, setStats] = useState(null);
+
+  const tabs = [
+    { id: "all", label: "All Files", icon: FolderOpen, color: "indigo" },
+    { id: "image", label: "Images", icon: Image, color: "blue" },
+    { id: "video", label: "Videos", icon: Video, color: "purple" },
+    { id: "audio", label: "Music", icon: Music, color: "pink" },
+    { id: "document", label: "Documents", icon: FileText, color: "green" },
+    { id: "recent", label: "Recent", icon: Clock, color: "orange" },
+  ];
 
   useEffect(() => {
     loadFiles();
@@ -44,7 +55,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     filterFiles();
-  }, [files, searchQuery, categoryFilter]);
+  }, [files, searchQuery, activeTab]);
 
   const loadFiles = async () => {
     try {
@@ -70,10 +81,16 @@ export default function Dashboard() {
   const filterFiles = () => {
     let filtered = files;
 
-    if (categoryFilter !== "all") {
-      filtered = filtered.filter((f) => f.category === categoryFilter);
+    // Filter by tab
+    if (activeTab === "recent") {
+      filtered = [...files]
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        .slice(0, 20);
+    } else if (activeTab !== "all") {
+      filtered = filtered.filter((f) => f.category === activeTab);
     }
 
+    // Filter by search
     if (searchQuery) {
       filtered = filtered.filter((f) =>
         f.original_name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -135,188 +152,293 @@ export default function Dashboard() {
     }
   };
 
+  const getCategoryColor = (category) => {
+    switch (category) {
+      case "image":
+        return "from-blue-500 to-cyan-500";
+      case "video":
+        return "from-purple-500 to-pink-500";
+      case "audio":
+        return "from-pink-500 to-rose-500";
+      case "document":
+        return "from-green-500 to-emerald-500";
+      default:
+        return "from-gray-500 to-slate-500";
+    }
+  };
+
   const handleLogout = () => {
     logout();
     navigate("/login");
   };
 
+  const getTabColor = (color) => {
+    const colors = {
+      indigo: "text-indigo-600 bg-indigo-50 border-indigo-200",
+      blue: "text-blue-600 bg-blue-50 border-blue-200",
+      purple: "text-purple-600 bg-purple-50 border-purple-200",
+      pink: "text-pink-600 bg-pink-50 border-pink-200",
+      green: "text-green-600 bg-green-50 border-green-200",
+      orange: "text-orange-600 bg-orange-50 border-orange-200",
+    };
+    return colors[color] || colors.indigo;
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b">
+      <header className="bg-white/80 backdrop-blur-lg shadow-sm border-b sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <HardDrive className="w-8 h-8 text-indigo-600 mr-3" />
-              <h1 className="text-2xl font-bold text-gray-800">
-                Local Storage
-              </h1>
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl shadow-lg">
+                <HardDrive className="w-7 h-7 text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                  Local Storage
+                </h1>
+                <p className="text-sm text-gray-500">
+                  Your personal file vault
+                </p>
+              </div>
             </div>
             <div className="flex items-center gap-4">
-              <span className="text-gray-600">Welcome, {user?.username}!</span>
               <button
-                onClick={handleLogout}
-                className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition"
+                onClick={() => setShowUpload(true)}
+                className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg transform hover:scale-105 transition-all duration-200"
               >
-                <LogOut className="w-5 h-5" />
-                Logout
+                <Upload className="w-5 h-5" />
+                <span className="font-medium">Upload</span>
               </button>
+              <div className="h-10 w-px bg-gray-200"></div>
+              <div className="flex items-center gap-3">
+                <div className="text-right">
+                  <p className="text-sm font-medium text-gray-700">
+                    {user?.username}
+                  </p>
+                  <p className="text-xs text-gray-500">{user?.email}</p>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="p-2.5 text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-xl transition-all duration-200"
+                  title="Logout"
+                >
+                  <LogOut className="w-5 h-5" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats */}
+        {/* Stats Cards */}
         {stats && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-            <div className="bg-white p-6 rounded-xl shadow-sm border">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-600 text-sm">Total Files</p>
-                  <p className="text-2xl font-bold text-gray-800">
-                    {stats.totalFiles}
-                  </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-4">
+                <div className="p-3 bg-indigo-100 rounded-xl">
+                  <FolderOpen className="w-6 h-6 text-indigo-600" />
                 </div>
-                <FileText className="w-10 h-10 text-indigo-600 opacity-20" />
+                <TrendingUp className="w-5 h-5 text-green-500" />
               </div>
+              <p className="text-gray-600 text-sm mb-1">Total Files</p>
+              <p className="text-3xl font-bold text-gray-800">
+                {stats.totalFiles}
+              </p>
             </div>
-            <div className="bg-white p-6 rounded-xl shadow-sm border">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-600 text-sm">Total Size</p>
-                  <p className="text-2xl font-bold text-gray-800">
-                    {formatFileSize(stats.totalSize)}
-                  </p>
+
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-4">
+                <div className="p-3 bg-green-100 rounded-xl">
+                  <HardDrive className="w-6 h-6 text-green-600" />
                 </div>
-                <HardDrive className="w-10 h-10 text-green-600 opacity-20" />
+                <TrendingUp className="w-5 h-5 text-green-500" />
               </div>
+              <p className="text-gray-600 text-sm mb-1">Storage Used</p>
+              <p className="text-3xl font-bold text-gray-800">
+                {formatFileSize(stats.totalSize)}
+              </p>
             </div>
-            <div className="bg-white p-6 rounded-xl shadow-sm border">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-600 text-sm">Images</p>
-                  <p className="text-2xl font-bold text-gray-800">
-                    {stats.images}
-                  </p>
+
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-4">
+                <div className="p-3 bg-blue-100 rounded-xl">
+                  <Image className="w-6 h-6 text-blue-600" />
                 </div>
-                <Image className="w-10 h-10 text-blue-600 opacity-20" />
               </div>
+              <p className="text-gray-600 text-sm mb-1">Images</p>
+              <p className="text-3xl font-bold text-gray-800">{stats.images}</p>
             </div>
-            <div className="bg-white p-6 rounded-xl shadow-sm border">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-600 text-sm">Videos</p>
-                  <p className="text-2xl font-bold text-gray-800">
-                    {stats.videos}
-                  </p>
+
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-4">
+                <div className="p-3 bg-purple-100 rounded-xl">
+                  <Video className="w-6 h-6 text-purple-600" />
                 </div>
-                <Video className="w-10 h-10 text-purple-600 opacity-20" />
               </div>
+              <p className="text-gray-600 text-sm mb-1">Videos</p>
+              <p className="text-3xl font-bold text-gray-800">{stats.videos}</p>
             </div>
           </div>
         )}
 
-        {/* Controls */}
-        <div className="bg-white rounded-xl shadow-sm border p-4 mb-6">
+        {/* Tabs */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-2 mb-6">
+          <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center gap-2 px-5 py-3 rounded-xl font-medium transition-all duration-200 whitespace-nowrap ${
+                    isActive
+                      ? `${getTabColor(tab.color)} shadow-sm`
+                      : "text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  <Icon className="w-5 h-5" />
+                  <span>{tab.label}</span>
+                  {tab.id !== "all" && tab.id !== "recent" && stats && (
+                    <span
+                      className={`ml-1 px-2 py-0.5 text-xs rounded-full ${
+                        isActive ? "bg-white/50" : "bg-gray-200"
+                      }`}
+                    >
+                      {tab.id === "image"
+                        ? stats.images
+                        : tab.id === "video"
+                        ? stats.videos
+                        : tab.id === "audio"
+                        ? stats.audio
+                        : tab.id === "document"
+                        ? stats.documents
+                        : 0}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Search and View Controls */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-6">
           <div className="flex flex-col md:flex-row gap-4">
             <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input
                 type="text"
-                placeholder="Search files..."
+                placeholder="Search your files..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+                className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
               />
             </div>
             <div className="flex gap-2">
-              <select
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
-              >
-                <option value="all">All Files</option>
-                <option value="image">Images</option>
-                <option value="video">Videos</option>
-                <option value="audio">Audio</option>
-                <option value="document">Documents</option>
-              </select>
               <button
-                onClick={() =>
-                  setViewMode(viewMode === "grid" ? "list" : "grid")
-                }
-                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+                onClick={() => setViewMode("grid")}
+                className={`p-3 rounded-xl transition-all ${
+                  viewMode === "grid"
+                    ? "bg-indigo-100 text-indigo-600"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
               >
-                {viewMode === "grid" ? (
-                  <List className="w-5 h-5" />
-                ) : (
-                  <Grid className="w-5 h-5" />
-                )}
+                <Grid className="w-5 h-5" />
               </button>
               <button
-                onClick={() => setShowUpload(true)}
-                className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+                onClick={() => setViewMode("list")}
+                className={`p-3 rounded-xl transition-all ${
+                  viewMode === "list"
+                    ? "bg-indigo-100 text-indigo-600"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
               >
-                <Upload className="w-5 h-5" />
-                Upload
+                <List className="w-5 h-5" />
               </button>
             </div>
           </div>
         </div>
 
-        {/* Files Grid/List */}
+        {/* Files Display */}
         {loading ? (
-          <div className="text-center py-12">
-            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-            <p className="mt-4 text-gray-600">Loading files...</p>
-          </div>
-        ) : filteredFiles.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-xl shadow-sm border">
-            <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-600 text-lg">No files found</p>
-            <p className="text-gray-500 text-sm mt-2">
-              Upload some files to get started
+          <div className="text-center py-20">
+            <div className="inline-block animate-spin rounded-full h-16 w-16 border-4 border-indigo-200 border-t-indigo-600"></div>
+            <p className="mt-4 text-gray-600 font-medium">
+              Loading your files...
             </p>
           </div>
+        ) : filteredFiles.length === 0 ? (
+          <div className="text-center py-20 bg-white rounded-2xl shadow-sm border border-gray-100">
+            <div className="w-24 h-24 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              <FileText className="w-12 h-12 text-indigo-600" />
+            </div>
+            <h3 className="text-xl font-semibold text-gray-800 mb-2">
+              No files found
+            </h3>
+            <p className="text-gray-500 mb-6">
+              {searchQuery
+                ? "Try a different search term"
+                : "Upload some files to get started"}
+            </p>
+            {!searchQuery && (
+              <button
+                onClick={() => setShowUpload(true)}
+                className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg transform hover:scale-105 transition-all duration-200 inline-flex items-center gap-2"
+              >
+                <Upload className="w-5 h-5" />
+                Upload Files
+              </button>
+            )}
+          </div>
         ) : viewMode === "grid" ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {filteredFiles.map((file) => (
               <div
                 key={file.id}
-                className="bg-white rounded-xl shadow-sm border hover:shadow-md transition overflow-hidden"
+                className="group bg-white rounded-2xl shadow-sm border border-gray-100 hover:shadow-xl hover:scale-105 transition-all duration-200 overflow-hidden"
               >
-                <div className="aspect-square bg-gradient-to-br from-indigo-50 to-purple-50 flex items-center justify-center">
-                  {getCategoryIcon(file.category)}
+                <div
+                  className={`aspect-square bg-gradient-to-br ${getCategoryColor(
+                    file.category
+                  )} flex items-center justify-center relative overflow-hidden`}
+                >
+                  <div className="absolute inset-0 bg-black/10 group-hover:bg-black/20 transition-colors"></div>
+                  <div className="relative z-10 text-white">
+                    {getCategoryIcon(file.category)}
+                  </div>
                 </div>
-                <div className="p-4">
+                <div className="p-5">
                   <p
-                    className="font-medium text-gray-800 truncate"
+                    className="font-semibold text-gray-800 truncate mb-2"
                     title={file.original_name}
                   >
                     {file.original_name}
                   </p>
-                  <p className="text-sm text-gray-500 mt-1">
-                    {formatFileSize(file.file_size)}
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    {formatDistanceToNow(new Date(file.created_at), {
-                      addSuffix: true,
-                    })}
-                  </p>
-                  <div className="flex gap-2 mt-3">
+                  <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
+                    <span>{formatFileSize(file.file_size)}</span>
+                    <span className="text-xs">
+                      {formatDistanceToNow(new Date(file.created_at), {
+                        addSuffix: true,
+                      })}
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
                     <button
                       onClick={() => handleDownload(file)}
-                      className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition text-sm"
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-all font-medium"
                     >
                       <Download className="w-4 h-4" />
                       Download
                     </button>
                     <button
                       onClick={() => handleDelete(file.id)}
-                      className="px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition"
+                      className="p-2.5 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-all"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-5 h-5" />
                     </button>
                   </div>
                 </div>
@@ -324,69 +446,86 @@ export default function Dashboard() {
             ))}
           </div>
         ) : (
-          <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Type
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Size
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Modified
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {filteredFiles.map((file) => (
-                  <tr key={file.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        {getCategoryIcon(file.category)}
-                        <span className="text-gray-800">
-                          {file.original_name}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-gray-600 capitalize">
-                      {file.category}
-                    </td>
-                    <td className="px-6 py-4 text-gray-600">
-                      {formatFileSize(file.file_size)}
-                    </td>
-                    <td className="px-6 py-4 text-gray-600">
-                      {formatDistanceToNow(new Date(file.created_at), {
-                        addSuffix: true,
-                      })}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex gap-2 justify-end">
-                        <button
-                          onClick={() => handleDownload(file)}
-                          className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
-                        >
-                          <Download className="w-5 h-5" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(file.id)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-                        >
-                          <Trash2 className="w-5 h-5" />
-                        </button>
-                      </div>
-                    </td>
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      Name
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      Type
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      Size
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      Modified
+                    </th>
+                    <th className="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      Actions
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {filteredFiles.map((file) => (
+                    <tr
+                      key={file.id}
+                      className="hover:bg-gray-50 transition-colors"
+                    >
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`p-2 rounded-lg bg-gradient-to-br ${getCategoryColor(
+                              file.category
+                            )}`}
+                          >
+                            <div className="text-white">
+                              {getCategoryIcon(file.category)}
+                            </div>
+                          </div>
+                          <span className="font-medium text-gray-800">
+                            {file.original_name}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-medium capitalize">
+                          {file.category}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-gray-600 font-medium">
+                        {formatFileSize(file.file_size)}
+                      </td>
+                      <td className="px-6 py-4 text-gray-600">
+                        {formatDistanceToNow(new Date(file.created_at), {
+                          addSuffix: true,
+                        })}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex gap-2 justify-end">
+                          <button
+                            onClick={() => handleDownload(file)}
+                            className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                            title="Download"
+                          >
+                            <Download className="w-5 h-5" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(file.id)}
+                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-5 h-5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </main>
