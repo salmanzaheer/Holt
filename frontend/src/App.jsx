@@ -7,6 +7,8 @@ import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import Upload from "./pages/Upload";
 import Settings from "./pages/Settings";
+import TwoFactorAuth from "./pages/TwoFactorAuth";
+import Sharing from "./pages/Sharing";
 import Layout from "./components/Layout";
 
 function PrivateRoute({ children, title }) {
@@ -20,7 +22,11 @@ function PrivateRoute({ children, title }) {
     );
   }
 
-  return user ? <Layout title={title}>{children}</Layout> : <Navigate to="/login" />;
+  return user ? (
+    <Layout title={title}>{children}</Layout>
+  ) : (
+    <Navigate to="/login" />
+  );
 }
 
 function PublicRoute({ children }) {
@@ -61,6 +67,22 @@ function AppRoutes() {
         element={
           <PrivateRoute title="Settings">
             <Settings />
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/2fa"
+        element={
+          <PrivateRoute title="Two-Factor Authentication">
+            <TwoFactorAuth />
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/sharing"
+        element={
+          <PrivateRoute title="Sharing">
+            <Sharing />
           </PrivateRoute>
         }
       />

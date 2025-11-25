@@ -1,8 +1,10 @@
 // middleware/auth.js
 const jwt = require("jsonwebtoken");
 
-const JWT_SECRET =
-  process.env.JWT_SECRET || "your-secret-key-change-this-in-production";
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error("FATAL_ERROR: JWT_SECRET environment variable is not set.");
+}
 
 function authenticateToken(req, res, next) {
   const authHeader = req.headers["authorization"];
@@ -33,4 +35,4 @@ function generateToken(user) {
   );
 }
 
-module.exports = { authenticateToken, generateToken, JWT_SECRET };
+module.exports = { authenticateToken, generateToken };

@@ -1,20 +1,24 @@
 // server.js
+require("dotenv").config({
+  path: require("path").resolve(__dirname, "./.env"),
+});
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const path = require("path");
-require("dotenv").config();
 
 const authRoutes = require("./routes/auth");
 const fileRoutes = require("./routes/files");
 const userRoutes = require("./routes/users");
+const sharingRoutes = require("./routes/sharing");
+const { runMigrations } = require("./db/migrations");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Middleware
-//app.use(helmet());
+app.use(helmet());
 app.use(
   cors({
     origin: "http://localhost:5173",
@@ -35,6 +39,7 @@ app.use("/api/", limiter);
 app.use("/api/auth", authRoutes);
 app.use("/api/files", fileRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/sharing", sharingRoutes);
 
 // Health check
 app.get("/health", (req, res) => {
@@ -58,6 +63,7 @@ app.use((req, res) => {
 });
 
 app.listen(PORT, () => {
+  runMigrations();
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(
     `📁 File storage path: ${process.env.STORAGE_PATH || "./storage"}`
