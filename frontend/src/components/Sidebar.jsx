@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { Home, Upload, Settings } from "lucide-react";
+import { Home, Upload, Settings, Share2 } from "lucide-react";
 import React from "react";
 
 const Sidebar = () => {
@@ -23,6 +23,12 @@ const Sidebar = () => {
           <NavLink to="/settings">
             <Settings className="h-5 w-5" />
             Settings
+          </NavLink>
+        </li>
+        <li>
+          <NavLink to="/sharing">
+            <Share2 className="h-5 w-5" />
+            Sharing
           </NavLink>
         </li>
       </ul>

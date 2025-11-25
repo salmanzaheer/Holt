@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext, useEffect } from "react";
 import {
   login as apiLogin,
+  login2FA as apiLogin2FA,
   register as apiRegister,
   verifyToken,
 } from "../services/api";
@@ -29,8 +30,15 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  const login = async (credentials) => {
-    const response = await apiLogin(credentials);
+  const login = async (credentials, is2FA = false) => {
+    const response = is2FA
+      ? await apiLogin2FA(credentials)
+      : await apiLogin(credentials);
+
+    if (response.data.two_factor_required) {
+      return response;
+    }
+
     const { user, token } = response.data;
 
     localStorage.setItem("token", token);
