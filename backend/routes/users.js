@@ -9,7 +9,7 @@ const router = express.Router();
 router.get("/profile", authenticateToken, async (req, res) => {
   try {
     const user = await db.getAsync(
-      "SELECT id, username, email, created_at FROM users WHERE id = ?",
+      "SELECT id, username, email, created_at FROM users WHERE id = $1",
       [req.user.id]
     );
 
@@ -28,7 +28,7 @@ router.get("/profile", authenticateToken, async (req, res) => {
         COUNT(CASE WHEN category = 'video' THEN 1 END) as videos,
         COUNT(CASE WHEN category = 'audio' THEN 1 END) as audio,
         COUNT(CASE WHEN category = 'document' THEN 1 END) as documents
-       FROM files WHERE user_id = ?`,
+       FROM files WHERE user_id = $1`,
       [req.user.id]
     );
 

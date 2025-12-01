@@ -17,7 +17,7 @@ router.post("/share", authenticateToken, async (req, res) => {
 
     // Find the user to share with
     const sharedWithUser = await db.getAsync(
-      "SELECT id FROM users WHERE email = ?",
+      "SELECT id FROM users WHERE email = $1",
       [email]
     );
 
@@ -38,7 +38,7 @@ router.post("/share", authenticateToken, async (req, res) => {
 
     // Check if the file exists and belongs to the user
     const file = await db.getAsync(
-      "SELECT id FROM files WHERE id = ? AND user_id = ?",
+      "SELECT id FROM files WHERE id = $1 AND user_id = $2",
       [fileId, req.user.id]
     );
 
@@ -53,7 +53,7 @@ router.post("/share", authenticateToken, async (req, res) => {
 
     // Check if the file is already shared with the user
     const existingShare = await db.getAsync(
-      "SELECT id FROM shared_files WHERE file_id = ? AND shared_with = ?",
+      "SELECT id FROM shared_files WHERE file_id = $1 AND shared_with = $2",
       [fileId, sharedWithUser.id]
     );
 
@@ -68,7 +68,7 @@ router.post("/share", authenticateToken, async (req, res) => {
 
     // Share the file
     await db.runAsync(
-      "INSERT INTO shared_files (file_id, shared_by, shared_with) VALUES (?, ?, ?)",
+      "INSERT INTO shared_files (file_id, shared_by, shared_with) VALUES ($1, $2, $3)",
       [fileId, req.user.id, sharedWithUser.id]
     );
 
@@ -96,7 +96,7 @@ router.get("/shared-with-me", authenticateToken, async (req, res) => {
        FROM shared_files sf
        JOIN files f ON sf.file_id = f.id
        JOIN users u ON sf.shared_by = u.id
-       WHERE sf.shared_with = ?`,
+       WHERE sf.shared_with = $1`,
       [req.user.id]
     );
 
@@ -120,7 +120,7 @@ router.get("/my-shares", authenticateToken, async (req, res) => {
        FROM shared_files sf
        JOIN files f ON sf.file_id = f.id
        JOIN users u ON sf.shared_with = u.id
-       WHERE sf.shared_by = ?`,
+       WHERE sf.shared_by = $1`,
       [req.user.id]
     );
 
@@ -146,7 +146,7 @@ router.delete("/unshare", authenticateToken, async (req, res) => {
     }
 
     const sharedWithUser = await db.getAsync(
-      "SELECT id FROM users WHERE email = ?",
+      "SELECT id FROM users WHERE email = $1",
       [email]
     );
 
@@ -157,7 +157,7 @@ router.delete("/unshare", authenticateToken, async (req, res) => {
     }
 
     await db.runAsync(
-      "DELETE FROM shared_files WHERE file_id = ? AND shared_by = ? AND shared_with = ?",
+      "DELETE FROM shared_files WHERE file_id = $1 AND shared_by = $2 AND shared_with = $3",
       [fileId, req.user.id, sharedWithUser.id]
     );
 

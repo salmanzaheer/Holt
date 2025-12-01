@@ -32,7 +32,7 @@ router.post("/register", async (req, res) => {
 
     // Check if user exists
     const existingUser = await db.getAsync(
-      "SELECT id FROM users WHERE username = ? OR email = ?",
+      "SELECT id FROM users WHERE username = $1 OR email = $2",
       [username, email]
     );
 
@@ -47,7 +47,7 @@ router.post("/register", async (req, res) => {
 
     // Create user
     const result = await db.runAsync(
-      "INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)",
+      "INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id",
       [username, email, passwordHash]
     );
 
@@ -79,8 +79,8 @@ router.post("/login", async (req, res) => {
 
     // Find user
     const user = await db.getAsync(
-      "SELECT * FROM users WHERE username = ? OR email = ?",
-      [username, username]
+      "SELECT * FROM users WHERE username = $1 OR email = $1",
+      [username]
     );
 
     if (!user) {
@@ -135,7 +135,7 @@ router.post("/login/2fa", async (req, res) => {
         });
     }
 
-    const user = await db.getAsync("SELECT * FROM users WHERE id = ?", [
+    const user = await db.getAsync("SELECT * FROM users WHERE id = $1", [
       userId,
     ]);
 
@@ -188,7 +188,7 @@ router.post("/2fa/generate", authenticateToken, async (req, res) => {
       name: `Hault:${req.user.email}`,
     });
 
-    await db.runAsync("UPDATE users SET two_factor_secret = ? WHERE id = ?", [
+    await db.runAsync("UPDATE users SET two_factor_secret = $1 WHERE id = $2", [
       secret.base32,
       req.user.id,
     ]);
@@ -222,7 +222,7 @@ router.post("/2fa/verify", authenticateToken, async (req, res) => {
     }
 
     const user = await db.getAsync(
-      "SELECT two_factor_secret FROM users WHERE id = ?",
+      "SELECT two_factor_secret FROM users WHERE id = $1",
       [req.user.id]
     );
 
@@ -240,7 +240,7 @@ router.post("/2fa/verify", authenticateToken, async (req, res) => {
 
     if (verified) {
       await db.runAsync(
-        "UPDATE users SET two_factor_enabled = 1 WHERE id = ?",
+        "UPDATE users SET two_factor_enabled = true WHERE id = $1",
         [req.user.id]
       );
       res.json({ message: "2FA enabled successfully" });
@@ -261,7 +261,7 @@ router.post("/2fa/verify", authenticateToken, async (req, res) => {
 router.post("/2fa/disable", authenticateToken, async (req, res) => {
   try {
     await db.runAsync(
-      "UPDATE users SET two_factor_enabled = 0, two_factor_secret = NULL WHERE id = ?",
+      "UPDATE users SET two_factor_enabled = false, two_factor_secret = NULL WHERE id = $1",
       [req.user.id]
     );
     res.json({ message: "2FA disabled successfully" });

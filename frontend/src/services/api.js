@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_URL = "http://localhost:3001/api";
+const API_URL = "/api";
 
 const api = axios.create({
   baseURL: API_URL,
@@ -83,5 +83,22 @@ export const getThumbnailUrl = (fileId, token) =>
 
 // Users
 export const getUserProfile = () => api.get("/users/profile");
+
+// Folders
+export const createFolder = (name, parentId) => api.post("/folders", { name, parentId });
+export const getFolders = (parentId) => api.get("/folders", { params: { parentId } });
+export const renameFolder = (id, name) => api.put(`/folders/${id}`, { name });
+export const deleteFolder = (id) => api.delete(`/folders/${id}`);
+
+// Passwords
+export const getPasswords = () => api.get("/passwords");
+export const createPassword = (data) => api.post("/passwords", data);
+export const revealPassword = (id) => api.get(`/passwords/${id}/reveal`);
+export const updatePassword = (id, data) => api.put(`/passwords/${id}`, data);
+export const deletePassword = (id) => api.delete(`/passwords/${id}`);
+
+// File Operations
+export const moveFiles = (fileIds, targetFolderId) => api.put("/files/move", { fileIds, targetFolderId });
+export const copyFiles = (fileIds, targetFolderId) => api.post("/files/copy", { fileIds, targetFolderId });
 
 export default api;

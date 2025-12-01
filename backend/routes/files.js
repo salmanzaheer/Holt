@@ -5,10 +5,11 @@ const path = require("path");
 const fs = require("fs");
 const fsp = require("fs").promises;
 const sharp = require("sharp");
-const jwt = require("jsonwebtoken");
+const jwt =require("jsonwebtoken");
 const crypto = require("crypto");
 const { authenticateToken } = require("../middleware/auth");
 const db = require("../db/config");
+const { logAudit } = require("../utils/audit");
 
 const router = express.Router();
 
@@ -129,6 +130,15 @@ router.post(
       }
 
       const uploadedFiles = [];
+      // Parse folderId from body (FormData)
+      let folderId = req.body.folderId;
+      if (folderId === "null" || folderId === "") folderId = null;
+
+      // Verify folder belongs to user if provided
+      if (folderId) {
+         const folder = await db.getAsync("SELECT id FROM folders WHERE id = $1 AND user_id = $2", [folderId, req.user.id]);
+         if (!folder) folderId = null; // Fallback to root if invalid
+      }
 
       for (const file of req.files) {
         const category = categorizeFile(file.mimetype);
@@ -165,8 +175,8 @@ router.post(
           const encryptedSize = stat.size;
 
           const result = await db.runAsync(
-            `INSERT INTO files (user_id, filename, original_name, file_path, mime_type, file_size, thumbnail_path, category, iv)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO files (user_id, filename, original_name, file_path, mime_type, file_size, thumbnail_path, category, iv, folder_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
             [
               req.user.id,
               file.filename,
@@ -177,6 +187,7 @@ router.post(
               thumbnailPath,
               category,
               iv.toString("hex"),
+              folderId
             ]
           );
 
@@ -196,6 +207,8 @@ router.post(
           throw dbError;
         }
       }
+      
+      await logAudit(req, "UPLOAD_FILES", { count: uploadedFiles.length, folderId });
 
       res.status(201).json({
         message: "Files uploaded successfully",
@@ -210,22 +223,42 @@ router.post(
   }
 );
 
-// Get all files for user
+// Get all files for user (supports folder filtering)
 router.get("/", authenticateToken, async (req, res) => {
   try {
-    const { category, search } = req.query;
+    const { category, search, folderId } = req.query;
     let query =
-      "SELECT id, original_name, mime_type, file_size, category, created_at, thumbnail_path FROM files WHERE user_id = ?";
+      "SELECT id, original_name, mime_type, file_size, category, created_at, thumbnail_path, folder_id FROM files WHERE user_id = $1";
     const params = [req.user.id];
-
-    if (category) {
-      query += " AND category = ?";
-      params.push(category);
-    }
+    let paramIndex = 2;
 
     if (search) {
-      query += " AND original_name LIKE ?";
+      // Global search ignores folders
+      query += ` AND original_name LIKE $${paramIndex++}`;
       params.push(`%${search}%`);
+    } else {
+      // If not searching, respect folder structure
+      if (folderId && folderId !== 'null') {
+        query += ` AND folder_id = $${paramIndex++}`;
+        params.push(folderId);
+      } else if (category) {
+         // If category filtering, typical to show all files of that type regardless of folder? 
+         // Or specific folder? Let's assume global for category view (e.g. "All Images")
+         // Logic: If category is present, ignore folder unless folder is explicitly asked?
+         // Let's prioritize: if folderId is present, filter by it. If not, and category is present, global.
+         // If neither, root (folder_id IS NULL).
+         if (!folderId) {
+             // Global category view
+         }
+      } else {
+         // Root view
+         query += ` AND folder_id IS NULL`;
+      }
+    }
+
+    if (category) {
+      query += ` AND category = $${paramIndex++}`;
+      params.push(category);
     }
 
     query += " ORDER BY created_at DESC";
@@ -240,11 +273,112 @@ router.get("/", authenticateToken, async (req, res) => {
   }
 });
 
+// Move file
+router.put("/move", authenticateToken, async (req, res) => {
+  try {
+    const { fileIds, targetFolderId } = req.body; // Expect array of IDs
+    
+    if (!fileIds || !Array.isArray(fileIds)) {
+         return res.status(400).json({ error: { message: "fileIds array required" } });
+    }
+
+    // Verify target folder
+    let targetId = targetFolderId;
+    if (targetId === 'null' || targetId === '') targetId = null;
+    if (targetId) {
+        const folder = await db.getAsync("SELECT id FROM folders WHERE id = $1 AND user_id = $2", [targetId, req.user.id]);
+        if (!folder) return res.status(404).json({ error: { message: "Target folder not found" } });
+    }
+
+    // Update
+    // Use ANY($1) for array update if using PG properly, but simpler loop for compatibility/simplicity
+    for (const id of fileIds) {
+        await db.runAsync("UPDATE files SET folder_id = $1 WHERE id = $2 AND user_id = $3", [targetId, id, req.user.id]);
+    }
+
+    await logAudit(req, "MOVE_FILES", { count: fileIds.length, targetFolderId: targetId });
+
+    res.json({ message: "Files moved successfully" });
+  } catch (error) {
+     console.error("Move error:", error);
+     res.status(500).json({ error: { message: "Move failed" } });
+  }
+});
+
+// Copy file
+router.post("/copy", authenticateToken, async (req, res) => {
+  try {
+    const { fileIds, targetFolderId } = req.body;
+    
+    if (!fileIds || !Array.isArray(fileIds)) {
+         return res.status(400).json({ error: { message: "fileIds array required" } });
+    }
+    
+     // Verify target folder
+    let targetId = targetFolderId;
+    if (targetId === 'null' || targetId === '') targetId = null;
+    if (targetId) {
+        const folder = await db.getAsync("SELECT id FROM folders WHERE id = $1 AND user_id = $2", [targetId, req.user.id]);
+        if (!folder) return res.status(404).json({ error: { message: "Target folder not found" } });
+    }
+
+    let copiedCount = 0;
+    
+    for (const id of fileIds) {
+        const file = await db.getAsync("SELECT * FROM files WHERE id = $1 AND user_id = $2", [id, req.user.id]);
+        if (!file) continue;
+
+        // Generate new physical filenames
+        const newFilename = Date.now() + "-" + Math.round(Math.random() * 1e9) + "-" + file.original_name + ".enc";
+        const newFilePath = path.join(path.dirname(file.file_path), newFilename);
+        
+        // Copy file
+        await fsp.copyFile(file.file_path, newFilePath);
+        
+        let newThumbPath = null;
+        if (file.thumbnail_path) {
+            const thumbName = path.basename(file.thumbnail_path);
+            const newThumbName = "copy_" + Date.now() + "_" + thumbName;
+            newThumbPath = path.join(path.dirname(file.thumbnail_path), newThumbName);
+            await fsp.copyFile(file.thumbnail_path, newThumbPath);
+        }
+
+        // Insert record
+        await db.runAsync(
+            `INSERT INTO files (user_id, filename, original_name, file_path, mime_type, file_size, thumbnail_path, category, iv, folder_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+            [
+              req.user.id,
+              newFilename, // This is the "internal" filename, not original_name
+              file.original_name, // Keep original name
+              newFilePath,
+              file.mime_type,
+              file.file_size,
+              newThumbPath,
+              file.category,
+              file.iv, // We reused the file content (encrypted), so IV is same. 
+              // Ideally we decrypt/re-encrypt with new IV, but that's expensive for large files. 
+              // Copying ciphertext + IV is acceptable if we trust the source wasn't compromised.
+              targetId
+            ]
+        );
+        copiedCount++;
+    }
+
+    await logAudit(req, "COPY_FILES", { count: copiedCount, targetFolderId: targetId });
+    res.json({ message: `Copied ${copiedCount} files` });
+
+  } catch (error) {
+     console.error("Copy error:", error);
+     res.status(500).json({ error: { message: "Copy failed" } });
+  }
+});
+
 // Stream file (video, audio)
 router.get("/stream/:id", authenticateMediaToken, async (req, res) => {
   try {
     const file = await db.getAsync(
-      "SELECT * FROM files WHERE id = ? AND user_id = ?",
+      "SELECT * FROM files WHERE id = $1 AND user_id = $2",
       [req.params.id, req.user.id]
     );
 
@@ -260,6 +394,13 @@ router.get("/stream/:id", authenticateMediaToken, async (req, res) => {
 
     res.setHeader("Content-Type", file.mime_type);
 
+    // For video seeking support, we need byte range handling. 
+    // Decrypting the whole stream for ranges is tricky with AES-CBC (block chaining).
+    // Real streaming with seeking requires random access decryption (AES-CTR or GCM) or decrypting on fly efficiently.
+    // Current implementation pipes whole stream. Browser might buffer. 
+    // Seeking might break because we can't start decrypting in middle of CBC chain easily without previous block.
+    // FIX: For this scope, we stream continuously. If seeking needed, we'd need to rethink encryption mode.
+    
     const fileStream = fs.createReadStream(filePath).pipe(decipher);
     fileStream.pipe(res);
   } catch (error) {
@@ -272,7 +413,7 @@ router.get("/stream/:id", authenticateMediaToken, async (req, res) => {
 router.get("/view/:id", authenticateMediaToken, async (req, res) => {
   try {
     const file = await db.getAsync(
-      "SELECT * FROM files WHERE id = ? AND user_id = ?",
+      "SELECT * FROM files WHERE id = $1 AND user_id = $2",
       [req.params.id, req.user.id]
     );
 
@@ -303,7 +444,7 @@ router.get("/view/:id", authenticateMediaToken, async (req, res) => {
 router.get("/thumbnail/:id", authenticateMediaToken, async (req, res) => {
   try {
     const file = await db.getAsync(
-      "SELECT thumbnail_path FROM files WHERE id = ? AND user_id = ?",
+      "SELECT thumbnail_path FROM files WHERE id = $1 AND user_id = $2",
       [req.params.id, req.user.id]
     );
 
@@ -336,7 +477,7 @@ router.get("/thumbnail/:id", authenticateMediaToken, async (req, res) => {
 router.get("/download/:id", authenticateToken, async (req, res) => {
   try {
     const file = await db.getAsync(
-      "SELECT * FROM files WHERE id = ? AND user_id = ?",
+      "SELECT * FROM files WHERE id = $1 AND user_id = $2",
       [req.params.id, req.user.id]
     );
 
@@ -357,6 +498,9 @@ router.get("/download/:id", authenticateToken, async (req, res) => {
 
     const fileStream = fs.createReadStream(file.file_path).pipe(decipher);
     fileStream.pipe(res);
+    
+    await logAudit(req, "DOWNLOAD_FILE", { fileId: req.params.id });
+
   } catch (error) {
     console.error("Download error:", error);
     res
@@ -369,7 +513,7 @@ router.get("/download/:id", authenticateToken, async (req, res) => {
 router.delete("/:id", authenticateToken, async (req, res) => {
   try {
     const file = await db.getAsync(
-      "SELECT * FROM files WHERE id = ? AND user_id = ?",
+      "SELECT * FROM files WHERE id = $1 AND user_id = $2",
       [req.params.id, req.user.id]
     );
 
@@ -380,13 +524,15 @@ router.delete("/:id", authenticateToken, async (req, res) => {
     }
 
     // Delete physical files
-    await fs.unlink(file.file_path);
+    await fs.unlink(file.file_path).catch(() => {});
     if (file.thumbnail_path) {
       await fs.unlink(file.thumbnail_path).catch(() => {});
     }
 
     // Delete from database
-    await db.runAsync("DELETE FROM files WHERE id = ?", [req.params.id]);
+    await db.runAsync("DELETE FROM files WHERE id = $1", [req.params.id]);
+
+    await logAudit(req, "DELETE_FILE", { fileId: req.params.id, name: file.original_name });
 
     res.json({ message: "File deleted successfully" });
   } catch (error) {
@@ -406,7 +552,7 @@ router.patch("/:id", authenticateToken, async (req, res) => {
     }
 
     const file = await db.getAsync(
-      "SELECT id, original_name FROM files WHERE id = ? AND user_id = ?",
+      "SELECT id, original_name FROM files WHERE id = $1 AND user_id = $2",
       [req.params.id, req.user.id]
     );
 
@@ -416,10 +562,12 @@ router.patch("/:id", authenticateToken, async (req, res) => {
         .json({ error: { message: "File not found", status: 404 } });
     }
 
-    await db.runAsync("UPDATE files SET original_name = ? WHERE id = ?", [
+    await db.runAsync("UPDATE files SET original_name = $1 WHERE id = $2", [
       newName,
       req.params.id,
     ]);
+
+    await logAudit(req, "RENAME_FILE", { fileId: req.params.id, oldName: file.original_name, newName });
 
     res.json({
       message: "File renamed successfully",
@@ -435,7 +583,7 @@ router.patch("/:id", authenticateToken, async (req, res) => {
 router.get("/token/:id", authenticateToken, async (req, res) => {
   try {
     const file = await db.getAsync(
-      "SELECT id FROM files WHERE id = ? AND user_id = ?",
+      "SELECT id FROM files WHERE id = $1 AND user_id = $2",
       [req.params.id, req.user.id]
     );
 

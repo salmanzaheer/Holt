@@ -3,7 +3,7 @@ import { useDropzone } from "react-dropzone";
 import { Upload, File, CheckCircle, AlertCircle, X } from "lucide-react";
 import { uploadFiles } from "../services/api";
 
-export default function FileUpload({ onUploadComplete }) {
+export default function FileUpload({ onUploadComplete, folderId }) {
   const [files, setFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -49,6 +49,10 @@ export default function FileUpload({ onUploadComplete }) {
       files.forEach(({ file }) => {
         formData.append("files", file);
       });
+      
+      if (folderId) {
+          formData.append("folderId", folderId);
+      }
 
       await uploadFiles(formData, setProgress);
 

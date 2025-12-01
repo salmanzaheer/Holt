@@ -1,94 +1,84 @@
 // db/migrations.js
 const db = require("./config");
 
-function runMigrations() {
-  db.serialize(() => {
-    console.log("Running database migrations...");
+async function runMigrations() {
+  console.log("Running database migrations...");
+
+  try {
+    const isPostgres = db.isPostgres;
+    
+    // Helper to check column existence
+    const hasColumn = async (table, column) => {
+        try {
+          if (isPostgres) {
+              const res = await db.query(
+                  "SELECT column_name FROM information_schema.columns WHERE table_name = $1 AND column_name = $2",
+                  [table, column]
+              );
+              return res.rowCount > 0;
+          } else {
+              // SQLite
+              // The helper wrapper handles PRAGMA now
+              const cols = await db.allAsync(`PRAGMA table_info(${table})`);
+              return cols.some(c => c.name === column);
+          }
+        } catch (e) {
+          console.error(`Error checking column ${table}.${column}:`, e);
+          return false;
+        }
+    };
 
     // Migration 1: Add 'iv' column to files table
-    db.get("PRAGMA table_info(files)", (err, result) => {
-      if (err) {
-        console.error("Error checking files table schema:", err);
-        return;
+    if (!(await hasColumn('files', 'iv'))) {
+      try {
+        await db.query("ALTER TABLE files ADD COLUMN iv TEXT");
+        console.log("✅ Migration 1: 'iv' column added to files table");
+      } catch(e) {
+        // Ignore if already exists (race condition or bad check)
+        if (!e.message.includes('duplicate')) console.error(e);
       }
-
-      let columnExists = false;
-      if (result) {
-        for (let i = 0; i < result.length; i++) {
-          if (result[i].name === "iv") {
-            columnExists = true;
-            break;
-          }
-        }
-      }
-
-      if (!columnExists) {
-        db.run("ALTER TABLE files ADD COLUMN iv TEXT", (err) => {
-          if (err) {
-            console.error("Migration 1 error:", err.message);
-          } else {
-            console.log("✅ Migration 1: 'iv' column added to files table");
-          }
-        });
-      } else {
-        console.log("Migration 1: 'iv' column already exists");
-      }
-    });
+    } else {
+      console.log("Migration 1: 'iv' column already exists");
+    }
 
     // Migration 2: Add 2FA columns to users table
-    db.get("PRAGMA table_info(users)", (err, result) => {
-      if (err) {
-        console.error("Error checking users table schema:", err);
-        return;
+    if (!(await hasColumn('users', 'two_factor_secret'))) {
+      try {
+        await db.query("ALTER TABLE users ADD COLUMN two_factor_secret TEXT");
+        console.log("✅ Migration 2: 'two_factor_secret' column added to users table");
+      } catch(e) {
+        if (!e.message.includes('duplicate')) console.error(e);
       }
+    } else {
+      console.log("Migration 2: 'two_factor_secret' column already exists");
+    }
 
-      let secretExists = false;
-      let enabledExists = false;
-      if (result) {
-        for (let i = 0; i < result.length; i++) {
-          if (result[i].name === "two_factor_secret") {
-            secretExists = true;
-          }
-          if (result[i].name === "two_factor_enabled") {
-            enabledExists = true;
-          }
+    if (!(await hasColumn('users', 'two_factor_enabled'))) {
+       const type = isPostgres ? "BOOLEAN DEFAULT false" : "INTEGER DEFAULT 0";
+       try {
+         await db.query(`ALTER TABLE users ADD COLUMN two_factor_enabled ${type}`);
+         console.log("✅ Migration 2: 'two_factor_enabled' column added to users table");
+       } catch(e) {
+         if (!e.message.includes('duplicate')) console.error(e);
+       }
+    } else {
+       console.log("Migration 2: 'two_factor_enabled' column already exists");
+    }
+    
+    // Folder ID in files (Migration 3)
+    if (!(await hasColumn('files', 'folder_id'))) {
+        const type = isPostgres ? "INTEGER" : "INTEGER";
+        try {
+          await db.query(`ALTER TABLE files ADD COLUMN folder_id ${type}`);
+          console.log("✅ Migration 3: 'folder_id' column added to files table");
+        } catch(e) {
+          if (!e.message.includes('duplicate')) console.error(e);
         }
-      }
+    }
 
-      if (!secretExists) {
-        db.run("ALTER TABLE users ADD COLUMN two_factor_secret TEXT", (err) => {
-          if (err) {
-            console.error("Migration 2 error (secret):", err.message);
-          } else {
-            console.log(
-              "✅ Migration 2: 'two_factor_secret' column added to users table"
-            );
-          }
-        });
-      } else {
-        console.log("Migration 2: 'two_factor_secret' column already exists");
-      }
-
-      if (!enabledExists) {
-        db.run(
-          "ALTER TABLE users ADD COLUMN two_factor_enabled INTEGER DEFAULT 0",
-          (err) => {
-            if (err) {
-              console.error("Migration 2 error (enabled):", err.message);
-            } else {
-              console.log(
-                "✅ Migration 2: 'two_factor_enabled' column added to users table"
-              );
-            }
-          }
-        );
-      } else {
-        console.log("Migration 2: 'two_factor_enabled' column already exists");
-      }
-    });
-
-    // Add other migrations here in the future
-  });
+  } catch (err) {
+    console.error("Error running migrations:", err);
+  }
 }
 
 module.exports = { runMigrations };

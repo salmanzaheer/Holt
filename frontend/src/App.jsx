@@ -9,6 +9,7 @@ import Upload from "./pages/Upload";
 import Settings from "./pages/Settings";
 import TwoFactorAuth from "./pages/TwoFactorAuth";
 import Sharing from "./pages/Sharing";
+import Passwords from "./pages/Passwords";
 import Layout from "./components/Layout";
 
 function PrivateRoute({ children, title }) {
@@ -59,6 +60,14 @@ function AppRoutes() {
         element={
           <PrivateRoute title="Upload">
             <Upload />
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/passwords"
+        element={
+          <PrivateRoute title="Password Vault">
+            <Passwords />
           </PrivateRoute>
         }
       />

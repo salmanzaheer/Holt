@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  frontend:
+    build: ./frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+    restart: always
+
+  backend:
+    build: ./backend
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - JWT_SECRET=supersecretkey_change_this_in_production
+      - ENCRYPTION_KEY=12345678901234567890123456789012
+      - STORAGE_PATH=/usr/src/app/storage
+      # No PG_ variables means it defaults to SQLite
+    volumes:
+      - ./storage:/usr/src/app/storage
+      - ./data:/usr/src/app/data
+    networks:
+      - app-network
+    restart: always
+
+networks:
+  app-network:
+    driver: bridge

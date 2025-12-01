@@ -10,6 +10,8 @@ const path = require("path");
 
 const authRoutes = require("./routes/auth");
 const fileRoutes = require("./routes/files");
+const folderRoutes = require("./routes/folders");
+const passwordRoutes = require("./routes/passwords");
 const userRoutes = require("./routes/users");
 const sharingRoutes = require("./routes/sharing");
 const { runMigrations } = require("./db/migrations");
@@ -38,6 +40,8 @@ app.use("/api/", limiter);
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/files", fileRoutes);
+app.use("/api/folders", folderRoutes);
+app.use("/api/passwords", passwordRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/sharing", sharingRoutes);
 
